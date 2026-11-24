@@ -665,7 +665,7 @@
     // 家族の出題
     const fc2 = el('section', 'card');
     fc2.appendChild(el('h2', null, '🎁 家族に問題を出そう'));
-    fc2.appendChild(el('p', 'note', '出した問題は、1日1問「家族からの出題」としてみんなに届きます。' + (d.myPending ? '\n（出題待ち：あなたの問題 ' + d.myPending + '問）' : '')));
+    fc2.appendChild(el('p', 'note', '出した問題は、1日1問ボーナス問題（11問目）として家族全員に届きます。自分にしかわからない問題で1点かせぐのもアリ！' + (d.myPending ? '\n（出題待ち：あなたの問題 ' + d.myPending + '問）' : '')));
     const fb = el('button', 'btn2', '問題を出す');
     fb.onclick = renderContrib;
     fc2.appendChild(fb);
@@ -785,7 +785,6 @@
       card.appendChild(f);
     };
 
-    chipField('誰向けの問題？', 'target', ['みんな', '中3コース', '小学生コース']);
     chipField('教科', 'subject', ['国語', '数学', '英語', '理科', '社会', 'その他']);
     textField('問題文', 'question', { multi: true, max: 300, ph: '例）日本でいちばん高い山は？' });
     textField('正解', 'correct', { ok: true, ph: '例）富士山' });
@@ -793,7 +792,7 @@
     textField('まちがいの選択肢2', 'wrong2', { ph: '例）槍ヶ岳' });
     textField('まちがいの選択肢3', 'wrong3', { ph: '例）阿蘇山' });
     textField('解説', 'explanation', { multi: true, max: 400, hint: 'なくてもOK', ph: '例）富士山は3776m。2番目に高いのは北岳です。' });
-    card.appendChild(el('p', 'note', '選択肢は、出題するときに自動でシャッフルされます。'));
+    card.appendChild(el('p', 'note', '家族全員に、ボーナス問題（11問目）として出題されます。\n自分の問題も自分に出るので、確実に1点ゲットのチャンス！\n選択肢は自動でシャッフルされます。'));
     app.appendChild(card);
 
     setBar('この問題を送る', async () => {
