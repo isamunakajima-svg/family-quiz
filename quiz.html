@@ -62,6 +62,16 @@
   .score .big { font-size: 46px; font-weight: 800; line-height: 1.1; }
   .score .big small { font-size: 22px; color: var(--sub); font-weight: 700; }
   .score .msg { margin-top: 6px; font-weight: 700; }
+  .face { font-size: 64px; line-height: 1.1; margin-bottom: 4px; }
+  .kao { font-size: 22px; font-weight: 700; color: var(--accent); margin: 2px 0 8px; letter-spacing: .02em; }
+  .rank-label { display: inline-block; font-size: 13px; font-weight: 800; color: #fff; border-radius: 999px; padding: 3px 14px; margin-bottom: 6px; }
+  .pop { animation: pop .6s cubic-bezier(.2,1.6,.4,1) both; }
+  .pop2 { animation: pop .6s .15s cubic-bezier(.2,1.6,.4,1) both; }
+  .shake { animation: pop .5s both, shake .6s .5s both; }
+  @keyframes pop { 0% { transform: scale(0); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+  @keyframes shake { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-8deg); } 75% { transform: rotate(8deg); } }
+  .confetti { position: fixed; top: -12px; width: 9px; height: 14px; border-radius: 2px; z-index: 50; pointer-events: none; animation: fall linear forwards; }
+  @keyframes fall { to { transform: translateY(105vh) rotate(720deg); opacity: .9; } }
   .pill { display: inline-block; background: var(--accent-bg); color: var(--accent); font-weight: 700; padding: 4px 14px; border-radius: 999px; font-size: 14px; margin-top: 8px; }
 
   /* ホーム */
@@ -280,7 +290,7 @@
     try {
       const data = await api('submit', { date: state.date, answers: state.picks });
       state.quizData = data;
-      renderResults(data);
+      renderResults(data, true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (e) {
       alertInline(e.message || String(e));
@@ -289,7 +299,31 @@
   }
 
   /* ---------- 結果と解説 ---------- */
-  function renderResults(data) {
+  // 点数に応じた顔文字とひとこと（ソウのアイデア）
+  function scoreTier(score, total) {
+    const r = total ? score / total : 0;
+    const pick = a => a[Math.floor(Math.random() * a.length)];
+    if (r === 1) return { label: 'PERFECT!', color: '#E8A400', face: '🏆', kao: pick(['(ﾉ≧∀≦)ﾉ', '٩(ˊᗜˋ*)و', '＼(^o^)／']), msg: pick(['全問正解！天才か！？', 'パーフェクト！今日は最高の日！', '満点！家族に自慢しよう']), confetti: true };
+    if (r >= 0.8) return { label: 'GREAT!', color: '#E8772E', face: pick(['😆', '🤩']), kao: pick(['(๑˃̵ᴗ˂̵)و', 'ヽ(•̀ω•́ )ゝ✧', '(* ´ ▽ ` *)']), msg: pick(['すごい！あと少しで満点！', 'いい調子！この勢いでいこう', 'ナイス！かなりできてる！']) };
+    if (r >= 0.6) return { label: 'GOOD', color: '#2E9E6A', face: pick(['😊', '🙂']), kao: pick(['(´▽`)', '( ´ ▽ ` )ﾉ', '(・∀・)']), msg: pick(['いい感じ！間違えたところを見直そう', 'まずまず！解き直しで仕上げよう', 'なかなか！あと一歩！']) };
+    if (r >= 0.4) return { label: 'まあまあ', color: '#8A8178', face: pick(['😐', '🤔']), kao: pick(['(・へ・)', '( ˘ω˘ )', '(´-ω-`)']), msg: pick(['まあまあ…解説を読めば伸びるはず', '惜しい！解き直しでリベンジ', 'ここからが勝負！']) };
+    return { label: 'ざんねん…', color: '#5B7DB1', face: pick(['😢', '😭']), kao: pick(['(´；ω；`)', '(；ω；)', '( ´•̥̥̥ω•̥̥̥` )']), msg: pick(['今日はざんねん…でも解き直せばOK！', 'くやしい！明日リベンジしよう', 'ドンマイ！解説を読んで覚えよう']), shake: true };
+  }
+
+  function confetti() {
+    const colors = ['#E8772E', '#3B7DD8', '#2E9E6A', '#C9822B', '#D9534F', '#8E5BD0', '#E8A400'];
+    for (let i = 0; i < 80; i++) {
+      const c = el('div', 'confetti');
+      c.style.left = Math.random() * 100 + 'vw';
+      c.style.background = colors[i % colors.length];
+      c.style.animationDuration = (1.8 + Math.random() * 1.8) + 's';
+      c.style.animationDelay = (Math.random() * 0.6) + 's';
+      document.body.appendChild(c);
+      setTimeout(() => c.remove(), 4500);
+    }
+  }
+
+  function renderResults(data, fresh) {
     $('#title').textContent = '結果と解説';
     setNav('成績', showHome);
     setBar('ホームで成績を見る', showHome);
@@ -297,13 +331,16 @@
     app.innerHTML = '';
 
     const sc = el('section', 'card score');
+    const tier = scoreTier(data.score, data.total);
+    const anim = !!fresh;
+    sc.appendChild(el('div', 'rank-label' + (anim ? ' pop' : ''), tier.label)).style.background = tier.color;
+    sc.appendChild(el('div', 'face' + (anim ? (tier.shake ? ' shake' : ' pop') : ''), tier.face));
+    sc.appendChild(el('div', 'kao' + (anim ? ' pop2' : ''), tier.kao));
     const big = el('div', 'big', String(data.score));
     big.appendChild(el('small', null, ' / ' + data.total));
     sc.appendChild(big);
-    const msg = data.score === data.total ? '全問正解！完璧👏'
-      : data.score >= Math.ceil(data.total * 0.6) ? 'いい調子！間違えた問題の解説を読もう'
-      : '解説を読んで覚えれば、明日はもっと解ける💪';
-    sc.appendChild(el('div', 'msg', msg));
+    sc.appendChild(el('div', 'msg', tier.msg));
+    if (anim && tier.confetti) setTimeout(confetti, 300);
     if (data.streak > 0) sc.appendChild(el('div', 'pill', '🔥 ' + data.streak + '日連続'));
     const wrong = data.results.filter(r => !r.correct);
     if (wrong.length) {
@@ -579,7 +616,8 @@
       if (missed.length) {
         setBar('まだ間違えた' + missed.length + '問をもう一度', () => { window.scrollTo({ top: 0 }); startRetry(missed.slice(), back); });
       } else {
-        cnt.textContent = '全問クリア！🎉';
+        cnt.textContent = '全問クリア！🎉 (ﾉ≧∀≦)ﾉ';
+        confetti();
         setBar('戻る', back);
       }
       window.scrollTo({ top: 0, behavior: 'smooth' });
