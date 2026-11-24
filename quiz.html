@@ -70,6 +70,27 @@
   .shake { animation: pop .5s both, shake .6s .5s both; }
   @keyframes pop { 0% { transform: scale(0); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
   @keyframes shake { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-8deg); } 75% { transform: rotate(8deg); } }
+  .gift { font-size: 12px; font-weight: 800; color: #8E5BD0; background: #F3ECFB; border-radius: 6px; padding: 1px 8px; }
+  .goal-bar { height: 16px; background: var(--soft); border-radius: 999px; overflow: hidden; margin: 8px 0 6px; }
+  .goal-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #F2A65A, #E8772E); transition: width .8s ease; }
+  .goal-num { display: flex; justify-content: space-between; align-items: baseline; }
+  .goal-num b { font-size: 26px; }
+  .goal-num span { color: var(--sub); font-size: 13px; }
+  .reward { background: var(--accent-bg); border-radius: 12px; padding: 10px 12px; font-weight: 800; color: var(--accent); margin-top: 8px; text-align: center; }
+  .contrib { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 10px; font-size: 12px; color: var(--sub); }
+  .contrib b { color: var(--ink); }
+  .badges { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .bdg { text-align: center; background: var(--accent-bg); border-radius: 12px; padding: 8px 2px 6px; }
+  .bdg .i { font-size: 26px; line-height: 1.2; }
+  .bdg .n { font-size: 10px; font-weight: 700; line-height: 1.3; display: block; }
+  .bdg.off { background: var(--soft); }
+  .bdg.off .i { filter: grayscale(1); opacity: .25; }
+  .bdg.off .n { color: var(--sub); font-weight: 400; }
+  .ticket { margin-top: 10px; text-align: center; font-size: 13px; background: var(--soft); border-radius: 10px; padding: 7px; }
+  .newb { display: flex; align-items: center; gap: 12px; background: var(--accent-bg); border-radius: 12px; padding: 10px 12px; margin-top: 8px; text-align: left; }
+  .newb .i { font-size: 32px; }
+  .newb b { display: block; }
+  .newb small { color: var(--sub); }
   .confetti { position: fixed; top: -12px; width: 9px; height: 14px; border-radius: 2px; z-index: 50; pointer-events: none; animation: fall linear forwards; }
   @keyframes fall { to { transform: translateY(105vh) rotate(720deg); opacity: .9; } }
   .pill { display: inline-block; background: var(--accent-bg); color: var(--accent); font-weight: 700; padding: 4px 14px; border-radius: 999px; font-size: 14px; margin-top: 8px; }
@@ -161,16 +182,23 @@
     return e;
   }
 
+  // 24時間有効の合言葉（セッション）。あればLINEの本人確認を省略できる
+  function getSession() { try { return localStorage.getItem('fq_session') || ''; } catch (e) { return ''; } }
+  function setSession(v) { try { if (v) localStorage.setItem('fq_session', v); else localStorage.removeItem('fq_session'); } catch (e) {} }
+
   async function api(action, extra) {
-    const idToken = liff.getIDToken();
+    let idToken = '';
+    try { idToken = liff.getIDToken() || ''; } catch (e) {}
     const res = await fetch(GAS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(Object.assign({ action, idToken }, extra || {})),
+      body: JSON.stringify(Object.assign({ action, idToken, session: getSession() }, extra || {})),
     });
     const data = await res.json();
+    if (data.session) setSession(data.session);
     if (!data.ok) {
-      if (data.code === 'TOKEN_EXPIRED') {
+      if (data.code === 'TOKEN_EXPIRED' || data.code === 'NO_TOKEN') {
+        setSession('');
         liff.logout();
         liff.login({ redirectUri: location.href });
         throw new Error('ログインし直しています…');
@@ -232,7 +260,8 @@
     b.style.background = COLORS[q.subject] || '#888';
     m.appendChild(b);
     if (q.grade) m.appendChild(el('span', 'grade', q.grade));
-    m.appendChild(el('span', 'unit', q.unit));
+    if (q.author) m.appendChild(el('span', 'gift', '🎁 ' + q.author + 'さんからの出題'));
+    else m.appendChild(el('span', 'unit', q.unit));
     if (extra) m.appendChild(extra);
     return m;
   }
@@ -241,7 +270,8 @@
   function renderQuiz(questions) {
     state.questions = questions;
     state.picks = {};
-    $('#title').textContent = '今日の' + questions.length + '問';
+    const bonusN = questions.filter(q => q.author).length;
+    $('#title').textContent = '今日の' + (questions.length - bonusN) + '問' + (bonusN ? '＋ボーナス' : '');
     setNav('成績', showHome);
     const app = $('#app');
     app.innerHTML = '';
@@ -341,6 +371,25 @@
     sc.appendChild(big);
     sc.appendChild(el('div', 'msg', tier.msg));
     if (anim && tier.confetti) setTimeout(confetti, 300);
+    if (data.newBadges && data.newBadges.length) {
+      const nb = el('div', anim ? 'pop2' : '');
+      nb.style.marginTop = '14px';
+      nb.appendChild(el('div', 'msg', '🎖 新しいバッジをゲット！'));
+      data.newBadges.forEach(b => {
+        const row = el('div', 'newb');
+        row.appendChild(el('span', 'i', b.icon));
+        const t = el('span');
+        t.appendChild(el('b', null, b.name));
+        t.appendChild(el('small', null, b.desc));
+        row.appendChild(t);
+        nb.appendChild(row);
+      });
+      sc.appendChild(nb);
+    }
+    if (data.teamGoal && !data.teamGoal.upcoming) {
+      const tg = data.teamGoal;
+      sc.appendChild(el('div', 'pill', '🍖 ' + tg.label + 'のチーム目標 ' + tg.correct + ' / ' + tg.goal + (data.todayCorrect ? '（今日 +' + data.todayCorrect + '）' : '') + (tg.achieved ? ' 達成！' : '')));
+    }
     if (data.streak > 0) sc.appendChild(el('div', 'pill', '🔥 ' + data.streak + '日連続'));
     const wrong = data.results.filter(r => !r.correct);
     if (wrong.length) {
@@ -416,8 +465,62 @@
       g.appendChild(st);
     });
     mc.appendChild(g);
+    mc.appendChild(el('div', 'ticket', me.ticketUsed ? '🎫 お休みチケット：今月は使用済み（休んだ1日をカバーしました）' : '🎫 お休みチケット：今月あと1枚（1日休んでも連続が続きます）'));
     if (d.examLeft !== null && d.examLeft >= 0) mc.appendChild(el('p', 'exam', '入試まであと ' + d.examLeft + ' 日'));
     app.appendChild(mc);
+
+    // チーム目標
+    if (d.teamGoal) {
+      const tg = d.teamGoal;
+      const gc = el('section', 'card');
+      gc.appendChild(el('h2', null, '🍖 ' + tg.label + 'のチーム目標'));
+      if (tg.upcoming) {
+        gc.appendChild(el('p', null, tg.startLabel + 'スタート！家族みんなの正解数の合計で ' + tg.goal + '問 をめざそう。'));
+      } else {
+        const num = el('div', 'goal-num');
+        const b = el('b', null, String(tg.correct));
+        b.appendChild(el('span', null, ' / ' + tg.goal + '問'));
+        num.appendChild(b);
+        num.appendChild(el('span', null, tg.achieved ? '達成！🎉' : 'あと' + (tg.goal - tg.correct) + '問・残り' + tg.daysLeft + '日'));
+        gc.appendChild(num);
+        const bar = el('div', 'goal-bar');
+        const fill = el('div', 'goal-fill');
+        fill.style.width = '0%';
+        bar.appendChild(fill);
+        gc.appendChild(bar);
+        setTimeout(() => { fill.style.width = Math.min(100, Math.round(tg.correct / tg.goal * 100)) + '%'; }, 50);
+        if (tg.perMember && tg.perMember.length) {
+          const cb = el('div', 'contrib');
+          tg.perMember.forEach(p => {
+            const sp = el('span', null, p.name + ' ');
+            sp.appendChild(el('b', null, p.correct + '問'));
+            cb.appendChild(sp);
+          });
+          gc.appendChild(cb);
+        }
+      }
+      if (tg.reward) gc.appendChild(el('div', 'reward', (tg.achieved ? '🎉 ごほうび決定：' : 'ごほうび：') + tg.reward));
+      app.appendChild(gc);
+    }
+
+    // バッジ
+    if (d.badgeDefs) {
+      const bc = el('section', 'card');
+      const got = me.badges || [];
+      bc.appendChild(el('h2', null, '🎖 バッジ（' + got.length + ' / ' + d.badgeDefs.length + '）'));
+      const grid = el('div', 'badges');
+      d.badgeDefs.forEach(b => {
+        const on = got.indexOf(b.id) >= 0;
+        const cell = el('div', 'bdg' + (on ? '' : ' off'));
+        cell.appendChild(el('div', 'i', b.icon));
+        cell.appendChild(el('span', 'n', on ? b.name : '？？？'));
+        cell.onclick = () => alertInfo((on ? b.icon + ' ' + b.name : '🔒 まだのバッジ') + '\n' + b.desc);
+        grid.appendChild(cell);
+      });
+      bc.appendChild(grid);
+      bc.appendChild(el('p', 'note', 'タップすると、とり方が見られます'));
+      app.appendChild(bc);
+    }
 
     // 最近14日
     const hc = el('section', 'card');
@@ -496,6 +599,7 @@
         sub.push(m.todayTotal ? '今日 ' + m.todayScore + '/' + m.todayTotal : '今日 まだ');
         if (m.streak > 0) sub.push('🔥' + m.streak + '日');
         if (m.rate !== null) sub.push('正答率' + m.rate + '%');
+        if (m.badges && m.badges.length) sub.push('🎖' + m.badges.length);
         nm.appendChild(el('small', null, sub.join('　')));
         row.appendChild(nm);
         const hv = el('span', 'hv', m.hensachi !== null ? String(m.hensachi) : '—');
@@ -546,6 +650,16 @@
       drawTable('rate');
       tc.appendChild(t);
       app.appendChild(tc);
+    }
+
+    if (d.formUrl) {
+      const fc2 = el('section', 'card');
+      fc2.appendChild(el('h2', null, '🎁 家族に問題を出そう'));
+      fc2.appendChild(el('p', 'note', '出した問題は、1日1問「家族からの出題」としてみんなに届きます。'));
+      const fb = el('button', 'btn2', '問題を出す（フォームを開く）');
+      fb.onclick = () => { try { liff.openWindow({ url: d.formUrl, external: true }); } catch (e) { location.href = d.formUrl; } };
+      fc2.appendChild(fb);
+      app.appendChild(fc2);
     }
 
     app.appendChild(el('p', 'note', '偏差値は、各問題の「全国の推定正答率」と自分の正答率の差から計算した目安です。\n実際の模試の偏差値とは異なります。'));
@@ -645,6 +759,14 @@
       box.appendChild(h);
     }
     app.appendChild(box);
+  }
+
+  function alertInfo(msg) {
+    const box = el('div', 'card');
+    box.style.cssText = 'position:fixed;left:16px;right:16px;bottom:96px;z-index:60;white-space:pre-line;text-align:center;font-weight:700;max-width:608px;margin:0 auto;';
+    box.textContent = msg;
+    document.body.appendChild(box);
+    setTimeout(() => box.remove(), 2500);
   }
 
   function alertInline(msg) {
