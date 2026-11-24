@@ -79,11 +79,20 @@
   .hist .hb.none { background: var(--soft); height: 4px !important; }
   .hist .n { font-size: 10px; color: var(--ink); font-weight: 700; }
   .hist .d { font-size: 9px; color: var(--sub); margin-top: 2px; white-space: nowrap; }
-  .row { display: grid; grid-template-columns: 44px 1fr 98px; align-items: center; gap: 10px; margin: 9px 0; font-size: 14px; }
+  .row { display: grid; grid-template-columns: 40px 1fr 44px 74px; align-items: center; gap: 8px; margin: 10px 0; font-size: 14px; }
+  .row .rt { text-align: right; font-weight: 700; font-size: 13px; }
+  .row .hs { text-align: center; border-radius: 10px; padding: 3px 0; line-height: 1.15; }
+  .row .hs b { display: block; font-size: 20px; }
+  .row .hs small { font-size: 10px; color: var(--sub); }
+  .row .hs.na b { font-size: 12px; color: var(--sub); padding: 4px 0 1px; }
+  .seg { display: inline-flex; background: var(--soft); border-radius: 999px; padding: 3px; margin-left: 8px; vertical-align: 1px; }
+  .seg button { border: 0; background: transparent; font: inherit; font-size: 12px; font-weight: 700; color: var(--sub); padding: 3px 12px; border-radius: 999px; }
+  .seg button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .btn2 { display: block; width: 100%; border: 2px solid var(--accent); background: #fff; color: var(--accent); border-radius: 14px; padding: 12px; font: inherit; font-weight: 800; font-size: 15px; }
+  .retry-head { text-align: center; }
+  .retry-head .big { font-size: 30px; font-weight: 800; }
   .bar-bg { height: 10px; background: var(--soft); border-radius: 999px; overflow: hidden; }
   .bar-fg { height: 100%; border-radius: 999px; }
-  .row .pct { text-align: right; color: var(--sub); font-size: 12px; line-height: 1.3; }
-  .row .pct b { color: var(--ink); font-size: 13px; }
   .fam { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
   .fam:first-of-type { border-top: 0; }
   .fam .rank { font-weight: 800; color: var(--sub); text-align: center; }
@@ -296,6 +305,13 @@
       : '解説を読んで覚えれば、明日はもっと解ける💪';
     sc.appendChild(el('div', 'msg', msg));
     if (data.streak > 0) sc.appendChild(el('div', 'pill', '🔥 ' + data.streak + '日連続'));
+    const wrong = data.results.filter(r => !r.correct);
+    if (wrong.length) {
+      const rb = el('button', 'btn2', '間違えた' + wrong.length + '問を解き直す');
+      rb.style.marginTop = '14px';
+      rb.onclick = () => startRetry(wrong, () => renderResults(data));
+      sc.appendChild(rb);
+    }
     app.appendChild(sc);
 
     data.results.forEach((r, i) => {
@@ -394,16 +410,38 @@
       fg.style.background = COLORS[s.subject];
       bg.appendChild(fg);
       row.appendChild(bg);
-      const pct = el('span', 'pct');
-      if (s.rate === null) pct.textContent = 'まだなし';
-      else {
-        pct.appendChild(el('b', null, s.rate + '%'));
-        pct.appendChild(document.createTextNode(s.hensachi !== null ? '　偏差値' + s.hensachi : '　（' + s.n + '問）'));
+      row.appendChild(el('span', 'rt', s.rate === null ? '—' : s.rate + '%'));
+      const hs = el('span', 'hs' + (s.hensachi === null ? ' na' : ''));
+      if (s.hensachi !== null) {
+        hs.appendChild(el('b', null, String(s.hensachi)));
+        hs.style.background = hexA(COLORS[s.subject], 0.14);
+        hs.style.color = COLORS[s.subject];
+      } else {
+        hs.appendChild(el('b', null, 'あと' + Math.max(1, s.need) + '問'));
+        hs.style.background = 'var(--soft)';
       }
-      row.appendChild(pct);
+      hs.appendChild(el('small', null, '偏差値'));
+      row.appendChild(hs);
       sc.appendChild(row);
     });
     app.appendChild(sc);
+
+    // 復習
+    if (d.reviewCount > 0) {
+      const rc = el('section', 'card');
+      rc.appendChild(el('h2', null, '復習'));
+      const rb = el('button', 'btn2', '最近間違えた問題を解き直す（' + d.reviewCount + '問）');
+      rb.onclick = async () => {
+        loading();
+        try {
+          const r = await api('review');
+          startRetry(r.items, showHome);
+        } catch (e) { showError(e.message || String(e), true); }
+      };
+      rc.appendChild(rb);
+      rc.appendChild(el('p', 'note', '直近14日に間違えた問題です。解き直しは成績・偏差値には影響しません。'));
+      app.appendChild(rc);
+    }
 
     // 家族ランキング
     if (d.members.length > 1) {
@@ -430,31 +468,45 @@
       });
       app.appendChild(fc);
 
-      // 家族の教科別比較
+      // 家族の教科別比較（正答率 / 偏差値 切りかえ）
       const tc = el('section', 'card');
-      tc.appendChild(el('h2', null, '家族の教科別正答率'));
+      const th2 = el('h2', null, '家族の教科別');
+      const seg = el('span', 'seg');
+      const bRate = el('button', 'on', '正答率');
+      const bHen = el('button', null, '偏差値');
+      seg.appendChild(bRate);
+      seg.appendChild(bHen);
+      th2.appendChild(seg);
+      tc.appendChild(th2);
       const t = el('table', 'tbl');
-      const head = el('tr');
-      head.appendChild(el('th', null, ''));
-      SUBJECTS.forEach(s => head.appendChild(el('th', null, s)));
-      t.appendChild(head);
-      d.members.forEach(m => {
-        const tr = el('tr');
-        tr.appendChild(el('td', 'nm', m.name));
-        m.bySubject.forEach(s => {
-          const td = el('td', null, s.rate === null ? '—' : s.rate + '');
-          if (s.rate !== null) {
-            const a = 0.12 + 0.6 * s.rate / 100;
-            td.style.background = hexA(COLORS[s.subject], a);
-            td.style.color = s.rate >= 60 ? '#fff' : 'var(--ink)';
-          } else {
-            td.style.background = 'var(--soft)';
-            td.style.color = 'var(--sub)';
-          }
-          tr.appendChild(td);
+      const drawTable = mode => {
+        t.innerHTML = '';
+        const head = el('tr');
+        head.appendChild(el('th', null, ''));
+        SUBJECTS.forEach(s => head.appendChild(el('th', null, s)));
+        t.appendChild(head);
+        d.members.forEach(m => {
+          const tr = el('tr');
+          tr.appendChild(el('td', 'nm', m.name));
+          m.bySubject.forEach(s => {
+            const v = mode === 'rate' ? s.rate : s.hensachi;
+            const td = el('td', null, v === null ? '—' : String(v));
+            if (v !== null) {
+              const level = mode === 'rate' ? v / 100 : Math.max(0, Math.min(1, (v - 30) / 40));
+              td.style.background = hexA(COLORS[s.subject], 0.12 + 0.6 * level);
+              td.style.color = level >= 0.6 ? '#fff' : 'var(--ink)';
+            } else {
+              td.style.background = 'var(--soft)';
+              td.style.color = 'var(--sub)';
+            }
+            tr.appendChild(td);
+          });
+          t.appendChild(tr);
         });
-        t.appendChild(tr);
-      });
+      };
+      bRate.onclick = () => { bRate.className = 'on'; bHen.className = ''; drawTable('rate'); };
+      bHen.onclick = () => { bHen.className = 'on'; bRate.className = ''; drawTable('hensachi'); };
+      drawTable('rate');
       tc.appendChild(t);
       app.appendChild(tc);
     }
@@ -465,6 +517,72 @@
       setBar(d.todayDone ? '今日の解説を見る' : '今日の10問を解く', () => openQuiz(''));
     } else {
       $('#bar').classList.add('hidden');
+    }
+  }
+
+  /* ---------- 解き直し（成績には記録しない） ---------- */
+  function startRetry(items, back) {
+    if (!items || !items.length) { back(); return; }
+    // 選択肢の並びを毎回シャッフル
+    const list = items.map(r => {
+      const order = r.choices.map((_, i) => i).sort(() => Math.random() - 0.5);
+      return Object.assign({}, r, { choices: order.map(i => r.choices[i]), answerIndex: order.indexOf(r.answerIndex) });
+    });
+    $('#title').textContent = '解き直し';
+    setNav('戻る', back);
+    const app = $('#app');
+    app.innerHTML = '';
+    const head = el('section', 'card retry-head');
+    const cnt = el('div', 'big', '0 / ' + list.length);
+    head.appendChild(cnt);
+    head.appendChild(el('div', 'note', 'タップするとすぐに答え合わせ。成績・偏差値には記録されません。'));
+    app.appendChild(head);
+    let done = 0;
+    const missed = [];
+    list.forEach((r, i) => {
+      const card = el('section', 'card');
+      card.id = 'r' + i;
+      card.appendChild(metaRow(r, i));
+      card.appendChild(el('p', 'qtext', r.question));
+      const box = el('div', 'choices');
+      const btns = r.choices.map((c, j) => {
+        const b = el('button', 'choice');
+        b.type = 'button';
+        b.appendChild(el('span', 'lb', LABELS[j]));
+        b.appendChild(el('span', 'tx', c));
+        b.onclick = () => {
+          btns.forEach(x => { x.disabled = true; });
+          btns[r.answerIndex].classList.add('is-correct');
+          const ok = j === r.answerIndex;
+          if (!ok) { b.classList.add('is-wrong'); missed.push(items[i]); }
+          card.querySelector('.meta').appendChild(el('span', 'mark ' + (ok ? 'ok' : 'ng'), ok ? '○' : '×'));
+          const ex = el('div', 'expl');
+          ex.appendChild(el('h3', null, '解説'));
+          ex.appendChild(el('p', null, r.explanation));
+          card.appendChild(ex);
+          done++;
+          cnt.textContent = done + ' / ' + list.length;
+          if (done === list.length) finish();
+          else {
+            const next = document.getElementById('r' + (i + 1));
+            if (next) setTimeout(() => next.scrollIntoView({ behavior: 'smooth', block: 'start' }), 900);
+          }
+        };
+        box.appendChild(b);
+        return b;
+      });
+      card.appendChild(box);
+      app.appendChild(card);
+    });
+    $('#bar').classList.add('hidden');
+    function finish() {
+      if (missed.length) {
+        setBar('まだ間違えた' + missed.length + '問をもう一度', () => { window.scrollTo({ top: 0 }); startRetry(missed.slice(), back); });
+      } else {
+        cnt.textContent = '全問クリア！🎉';
+        setBar('戻る', back);
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }
 
