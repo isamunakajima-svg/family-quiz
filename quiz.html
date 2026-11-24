@@ -91,6 +91,16 @@
   .newb .i { font-size: 32px; }
   .newb b { display: block; }
   .newb small { color: var(--sub); }
+  .fld { margin: 12px 0; }
+  .fld label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+  .fld label small { color: var(--sub); font-weight: 400; }
+  .fld input, .fld textarea, .fld select { width: 100%; border: 2px solid var(--line); border-radius: 10px; padding: 10px 12px; font: inherit; font-size: 16px; background: #fff; color: var(--ink); }
+  .fld textarea { min-height: 84px; resize: vertical; }
+  .fld input:focus, .fld textarea:focus, .fld select:focus { outline: none; border-color: var(--accent); }
+  .fld.ok input { border-color: var(--ok); background: var(--ok-bg); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips button { border: 2px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 14px; font-weight: 700; color: var(--sub); }
+  .chips button.on { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
   .confetti { position: fixed; top: -12px; width: 9px; height: 14px; border-radius: 2px; z-index: 50; pointer-events: none; animation: fall linear forwards; }
   @keyframes fall { to { transform: translateY(105vh) rotate(720deg); opacity: .9; } }
   .pill { display: inline-block; background: var(--accent-bg); color: var(--accent); font-weight: 700; padding: 4px 14px; border-radius: 999px; font-size: 14px; margin-top: 8px; }
@@ -652,15 +662,14 @@
       app.appendChild(tc);
     }
 
-    if (d.formUrl) {
-      const fc2 = el('section', 'card');
-      fc2.appendChild(el('h2', null, '🎁 家族に問題を出そう'));
-      fc2.appendChild(el('p', 'note', '出した問題は、1日1問「家族からの出題」としてみんなに届きます。'));
-      const fb = el('button', 'btn2', '問題を出す（フォームを開く）');
-      fb.onclick = () => { try { liff.openWindow({ url: d.formUrl, external: true }); } catch (e) { location.href = d.formUrl; } };
-      fc2.appendChild(fb);
-      app.appendChild(fc2);
-    }
+    // 家族の出題
+    const fc2 = el('section', 'card');
+    fc2.appendChild(el('h2', null, '🎁 家族に問題を出そう'));
+    fc2.appendChild(el('p', 'note', '出した問題は、1日1問「家族からの出題」としてみんなに届きます。' + (d.myPending ? '\n（出題待ち：あなたの問題 ' + d.myPending + '問）' : '')));
+    const fb = el('button', 'btn2', '問題を出す');
+    fb.onclick = renderContrib;
+    fc2.appendChild(fb);
+    app.appendChild(fc2);
 
     app.appendChild(el('p', 'note', '偏差値は、各問題の「全国の推定正答率」と自分の正答率の差から計算した目安です。\n実際の模試の偏差値とは異なります。'));
 
@@ -736,6 +745,84 @@
       }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+  }
+
+  /* ---------- 家族の出題フォーム（アプリ内） ---------- */
+  function renderContrib() {
+    $('#title').textContent = '問題を出す';
+    $('#dateLabel').textContent = '家族からの出題';
+    setNav('戻る', showHome);
+    window.scrollTo({ top: 0 });
+    const app = $('#app');
+    app.innerHTML = '';
+    const card = el('section', 'card');
+    const form = { target: 'みんな', subject: '国語' };
+
+    const chipField = (label, key, options) => {
+      const f = el('div', 'fld');
+      f.appendChild(el('label', null, label));
+      const box = el('div', 'chips');
+      options.forEach(o => {
+        const b = el('button', o === form[key] ? 'on' : '', o);
+        b.type = 'button';
+        b.onclick = () => { form[key] = o; [...box.children].forEach(x => x.classList.toggle('on', x === b)); };
+        box.appendChild(b);
+      });
+      f.appendChild(box);
+      card.appendChild(f);
+    };
+    const inputs = {};
+    const textField = (label, key, opts) => {
+      const f = el('div', 'fld' + (opts && opts.ok ? ' ok' : ''));
+      const l = el('label', null, label);
+      if (opts && opts.hint) l.appendChild(el('small', null, '　' + opts.hint));
+      f.appendChild(l);
+      const inp = el(opts && opts.multi ? 'textarea' : 'input');
+      if (opts && opts.ph) inp.placeholder = opts.ph;
+      inp.maxLength = opts && opts.max ? opts.max : 80;
+      inputs[key] = inp;
+      f.appendChild(inp);
+      card.appendChild(f);
+    };
+
+    chipField('誰向けの問題？', 'target', ['みんな', '中3コース', '小学生コース']);
+    chipField('教科', 'subject', ['国語', '数学', '英語', '理科', '社会', 'その他']);
+    textField('問題文', 'question', { multi: true, max: 300, ph: '例）日本でいちばん高い山は？' });
+    textField('正解', 'correct', { ok: true, ph: '例）富士山' });
+    textField('まちがいの選択肢1', 'wrong1', { ph: '例）北岳' });
+    textField('まちがいの選択肢2', 'wrong2', { ph: '例）槍ヶ岳' });
+    textField('まちがいの選択肢3', 'wrong3', { ph: '例）阿蘇山' });
+    textField('解説', 'explanation', { multi: true, max: 400, hint: 'なくてもOK', ph: '例）富士山は3776m。2番目に高いのは北岳です。' });
+    card.appendChild(el('p', 'note', '選択肢は、出題するときに自動でシャッフルされます。'));
+    app.appendChild(card);
+
+    setBar('この問題を送る', async () => {
+      const item = Object.assign({}, form);
+      Object.keys(inputs).forEach(k => { item[k] = inputs[k].value.trim(); });
+      const btn = $('#barBtn');
+      btn.disabled = true;
+      btn.textContent = '送信中…';
+      try {
+        const r = await api('contribute', { item });
+        app.innerHTML = '';
+        const done = el('section', 'card score');
+        done.appendChild(el('div', 'face pop', '🎁'));
+        done.appendChild(el('div', 'kao pop2', '٩(ˊᗜˋ*)و'));
+        done.appendChild(el('div', 'msg', '問題を受け付けました！'));
+        done.appendChild(el('p', 'note', '朝4時の配信で、ボーナス問題として家族に届きます。\n（出題待ちの問題：全部で ' + r.waiting + '問）'));
+        const again = el('button', 'btn2', 'もう1問出す');
+        again.style.marginTop = '12px';
+        again.onclick = renderContrib;
+        done.appendChild(again);
+        app.appendChild(done);
+        setBar('ホームへ戻る', showHome);
+        window.scrollTo({ top: 0 });
+      } catch (e) {
+        alertInline(e.message || String(e));
+        btn.disabled = false;
+        btn.textContent = 'この問題を送る';
+      }
+    });
   }
 
   function hexA(hex, a) {
