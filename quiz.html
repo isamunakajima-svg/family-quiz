@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>今日の10問</title>
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  :root {
+    --bg: #FAF7F2; --card: #FFFFFF; --ink: #2B2B2B; --sub: #8A8178; --line: #ECE6DD;
+    --accent: #E8772E; --ok: #2E9E6A; --ok-bg: #E8F6EF; --ng: #D9534F; --ng-bg: #FCEDEC;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+    font-size: 16px; line-height: 1.7; padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  }
+  header { padding: 20px 18px 8px; max-width: 640px; margin: 0 auto; }
+  header .date { color: var(--sub); font-size: 13px; }
+  header h1 { margin: 2px 0 0; font-size: 24px; letter-spacing: .02em; }
+  main { max-width: 640px; margin: 0 auto; padding: 8px 14px 24px; }
+
+  .card { background: var(--card); border-radius: 16px; padding: 18px 16px; margin: 14px 0; box-shadow: 0 1px 3px rgba(60,40,20,.06); border: 1px solid var(--line); }
+  .meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .no { font-weight: 700; font-size: 14px; }
+  .badge { color: #fff; font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 999px; }
+  .unit { color: var(--sub); font-size: 13px; }
+  .level { margin-left: auto; font-size: 11px; color: var(--sub); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; }
+  .mark { margin-left: auto; font-size: 22px; font-weight: 800; line-height: 1; }
+  .mark.ok { color: var(--ok); } .mark.ng { color: var(--ng); }
+  .qtext { white-space: pre-wrap; word-break: break-word; margin: 0 0 14px; font-size: 16.5px; }
+
+  .choices { display: grid; gap: 10px; }
+  .choice {
+    display: flex; gap: 12px; align-items: flex-start; width: 100%; text-align: left;
+    background: #fff; border: 2px solid var(--line); border-radius: 12px; padding: 12px 14px;
+    font: inherit; color: inherit; cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  .choice .lb { flex: none; width: 26px; height: 26px; border-radius: 50%; background: #F2EDE6; display: grid; place-items: center; font-size: 13px; font-weight: 700; margin-top: 1px; }
+  .choice .tx { white-space: pre-wrap; word-break: break-word; }
+  .choice.picked { border-color: var(--accent); background: #FFF4EC; }
+  .choice.picked .lb { background: var(--accent); color: #fff; }
+  .choice[disabled] { cursor: default; }
+  .choice.is-correct { border-color: var(--ok); background: var(--ok-bg); }
+  .choice.is-correct .lb { background: var(--ok); color: #fff; }
+  .choice.is-wrong { border-color: var(--ng); background: var(--ng-bg); }
+  .choice.is-wrong .lb { background: var(--ng); color: #fff; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 4px; padding: 0 6px; margin-left: 6px; vertical-align: 2px; }
+  .tag.you { background: #F2EDE6; color: var(--sub); }
+  .tag.ans { background: var(--ok); color: #fff; }
+
+  .expl { margin-top: 14px; background: #FBF8F3; border-radius: 12px; padding: 12px 14px; border-left: 4px solid var(--accent); }
+  .expl h3 { margin: 0 0 4px; font-size: 13px; color: var(--accent); }
+  .expl p { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 15px; }
+
+  .score { text-align: center; padding: 22px 16px; }
+  .score .big { font-size: 46px; font-weight: 800; line-height: 1.1; }
+  .score .big small { font-size: 22px; color: var(--sub); font-weight: 700; }
+  .score .msg { margin-top: 6px; font-weight: 700; }
+  .score .streak { margin-top: 8px; display: inline-block; background: #FFF4EC; color: var(--accent); font-weight: 700; padding: 4px 14px; border-radius: 999px; font-size: 14px; }
+
+  .stats h2 { font-size: 15px; margin: 0 0 10px; }
+  .row { display: grid; grid-template-columns: 44px 1fr 74px; align-items: center; gap: 10px; margin: 8px 0; font-size: 14px; }
+  .bar-bg { height: 10px; background: #F2EDE6; border-radius: 999px; overflow: hidden; }
+  .bar-fg { height: 100%; border-radius: 999px; }
+  .row .pct { text-align: right; color: var(--sub); font-size: 13px; }
+
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: rgba(250,247,242,.94); backdrop-filter: blur(8px); border-top: 1px solid var(--line); }
+  .bar button { display: block; width: 100%; max-width: 608px; margin: 0 auto; border: 0; border-radius: 14px; padding: 15px; font: inherit; font-weight: 800; font-size: 17px; background: var(--accent); color: #fff; }
+  .bar button[disabled] { background: #D8CFC4; }
+  .hidden { display: none; }
+
+  .center { text-align: center; color: var(--sub); padding: 60px 0; }
+  .spinner { width: 34px; height: 34px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; margin: 0 auto 12px; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .err { background: var(--ng-bg); color: #8B2E2B; border-radius: 12px; padding: 16px; margin-top: 20px; }
+  .err button { margin-top: 10px; border: 0; background: #fff; border-radius: 8px; padding: 8px 14px; font: inherit; font-weight: 700; color: var(--ng); }
+  .family h2 { font-size: 15px; margin: 0 0 6px; }
+  .fam { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+  .fam:first-of-type { border-top: 0; }
+  .fam .rank { font-weight: 800; color: var(--sub); text-align: center; }
+  .fam .nm { font-weight: 700; }
+  .fam .nm small { display: block; font-weight: 400; color: var(--sub); font-size: 12px; }
+  .fam .sc { font-weight: 800; font-size: 18px; }
+  .fam .sc.yet { font-size: 13px; color: var(--sub); font-weight: 700; }
+  .fam.me { background: #FFF4EC; margin: 0 -16px; padding-left: 16px; padding-right: 16px; }
+  .note { text-align: center; color: var(--sub); font-size: 13px; margin-top: 18px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="date" id="dateLabel">&nbsp;</div>
+  <h1 id="title">今日の問題</h1>
+</header>
+<main id="app">
+  <div class="center"><div class="spinner"></div>読み込み中…</div>
+</main>
+<div id="bar" class="bar hidden"><button id="submitBtn" disabled>採点する</button></div>
+
+<script>
+  // ===== 設定（ここだけ書き換え） =====
+  const LIFF_ID = 'YOUR_LIFF_ID';
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycby5voXO6CgykDBHErkboHFmoId-nkDrF8nCIF0E__RNRLQ0pAMXo2K42BAQ01Q-MmD_/exec';
+  // ===================================
+
+  const LABELS = ['ア', 'イ', 'ウ', 'エ'];
+  const COLORS = { 数学: '#3B7DD8', 英語: '#8E5BD0', 理科: '#2E9E6A', 社会: '#C9822B', 国語: '#D9534F' };
+  const state = { date: null, questions: [], picks: {} };
+
+  const $ = s => document.querySelector(s);
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined && text !== null) e.textContent = text;
+    return e;
+  }
+
+  async function api(action, extra) {
+    const idToken = liff.getIDToken();
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(Object.assign({ action, idToken }, extra || {})),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      if (data.code === 'TOKEN_EXPIRED') {
+        liff.logout();
+        liff.login({ redirectUri: location.href });
+        throw new Error('ログインし直しています…');
+      }
+      throw new Error(data.error || 'エラーが発生しました');
+    }
+    return data;
+  }
+
+  async function main() {
+    try {
+      await liff.init({ liffId: LIFF_ID });
+      if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
+      const date = new URLSearchParams(location.search).get('date') || '';
+      const data = await api('quiz', { date });
+      render(data);
+    } catch (e) {
+      showError(e.message || String(e));
+    }
+  }
+
+  function render(data) {
+    state.date = data.date;
+    $('#dateLabel').textContent = data.dateLabel + (data.today ? '' : '（過去の問題）');
+    if (data.answered) renderResults(data);
+    else renderQuiz(data.questions);
+  }
+
+  function metaRow(q, i, extra) {
+    const m = el('div', 'meta');
+    m.appendChild(el('span', 'no', '第' + (i + 1) + '問'));
+    const b = el('span', 'badge', q.subject);
+    b.style.background = COLORS[q.subject] || '#888';
+    m.appendChild(b);
+    m.appendChild(el('span', 'unit', q.unit));
+    if (extra) m.appendChild(extra);
+    else if (q.difficulty) m.appendChild(el('span', 'level', q.difficulty));
+    return m;
+  }
+
+  function renderQuiz(questions) {
+    state.questions = questions;
+    state.picks = {};
+    $('#title').textContent = '今日の' + questions.length + '問';
+    const app = $('#app');
+    app.innerHTML = '';
+
+    questions.forEach((q, i) => {
+      const card = el('section', 'card');
+      card.id = 'q' + i;
+      card.appendChild(metaRow(q, i));
+      card.appendChild(el('p', 'qtext', q.question));
+      const box = el('div', 'choices');
+      q.choices.forEach((c, j) => {
+        const btn = el('button', 'choice');
+        btn.type = 'button';
+        btn.appendChild(el('span', 'lb', LABELS[j]));
+        btn.appendChild(el('span', 'tx', c));
+        btn.addEventListener('click', () => pick(i, j, box));
+        box.appendChild(btn);
+      });
+      card.appendChild(box);
+      app.appendChild(card);
+    });
+
+    $('#bar').classList.remove('hidden');
+    $('#submitBtn').onclick = submit;
+    updateBar();
+  }
+
+  function pick(i, j, box) {
+    const q = state.questions[i];
+    const first = state.picks[q.qid] === undefined;
+    state.picks[q.qid] = j;
+    [...box.children].forEach((b, k) => b.classList.toggle('picked', k === j));
+    updateBar();
+    if (first) {
+      const next = state.questions.findIndex(x => state.picks[x.qid] === undefined);
+      if (next >= 0) setTimeout(() => document.getElementById('q' + next).scrollIntoView({ behavior: 'smooth', block: 'start' }), 250);
+    }
+  }
+
+  function updateBar() {
+    const n = Object.keys(state.picks).length;
+    const total = state.questions.length;
+    const btn = $('#submitBtn');
+    btn.disabled = n < total;
+    btn.textContent = n < total ? '採点する（' + n + ' / ' + total + '）' : '採点する';
+  }
+
+  async function submit() {
+    const btn = $('#submitBtn');
+    btn.disabled = true;
+    btn.textContent = '採点中…';
+    try {
+      const data = await api('submit', { date: state.date, answers: state.picks });
+      render(data);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (e) {
+      alertInline(e.message || String(e));
+      updateBar();
+    }
+  }
+
+  function renderResults(data) {
+    $('#bar').classList.add('hidden');
+    $('#title').textContent = '結果と解説';
+    const app = $('#app');
+    app.innerHTML = '';
+
+    // スコア
+    const sc = el('section', 'card score');
+    const big = el('div', 'big', String(data.score));
+    big.appendChild(el('small', null, ' / ' + data.total));
+    sc.appendChild(big);
+    const msg = data.score === data.total ? '全問正解！完璧👏'
+      : data.score >= Math.ceil(data.total * 0.6) ? 'いい調子！間違えた問題の解説を読もう'
+      : '解説をじっくり読めば、明日はもっと解ける💪';
+    sc.appendChild(el('div', 'msg', msg));
+    if (data.streak > 0) sc.appendChild(el('div', 'streak', '🔥 ' + data.streak + '日連続'));
+    app.appendChild(sc);
+
+    // 家族の成績
+    if (data.family && data.family.length > 1) {
+      const fm = el('section', 'card family');
+      fm.appendChild(el('h2', null, '👨‍👩‍👧‍👦 家族の今日の成績'));
+      let rank = 0, prev = null;
+      data.family.forEach((f, i) => {
+        const row = el('div', 'fam' + (f.me ? ' me' : ''));
+        if (f.done) { if (f.score !== prev) rank = i + 1; prev = f.score; }
+        const medal = f.done ? (['🥇', '🥈', '🥉'][rank - 1] || String(rank)) : '';
+        row.appendChild(el('span', 'rank', medal));
+        const nm = el('span', 'nm', f.name + (f.me ? '（自分）' : ''));
+        const sub = [];
+        if (f.streak > 0) sub.push('🔥' + f.streak + '日連続');
+        if (f.rate !== null) sub.push('通算正答率 ' + f.rate + '%');
+        if (sub.length) nm.appendChild(el('small', null, sub.join('　')));
+        row.appendChild(nm);
+        row.appendChild(el('span', 'sc' + (f.done ? '' : ' yet'), f.done ? f.score + ' / ' + f.total : 'まだ'));
+        fm.appendChild(row);
+      });
+      app.appendChild(fm);
+    }
+
+    // 各問題
+    data.results.forEach((r, i) => {
+      const card = el('section', 'card');
+      card.appendChild(metaRow(r, i, el('span', 'mark ' + (r.correct ? 'ok' : 'ng'), r.correct ? '○' : '×')));
+      card.appendChild(el('p', 'qtext', r.question));
+      const box = el('div', 'choices');
+      r.choices.forEach((c, j) => {
+        const b = el('button', 'choice');
+        b.type = 'button';
+        b.disabled = true;
+        if (j === r.answerIndex) b.classList.add('is-correct');
+        else if (j === r.chosenIndex) b.classList.add('is-wrong');
+        b.appendChild(el('span', 'lb', LABELS[j]));
+        const tx = el('span', 'tx', c);
+        if (j === r.chosenIndex) tx.appendChild(el('span', 'tag you', 'あなた'));
+        if (j === r.answerIndex) tx.appendChild(el('span', 'tag ans', '正解'));
+        b.appendChild(tx);
+        box.appendChild(b);
+      });
+      card.appendChild(box);
+      const ex = el('div', 'expl');
+      ex.appendChild(el('h3', null, '解説'));
+      ex.appendChild(el('p', null, r.explanation));
+      card.appendChild(ex);
+      app.appendChild(card);
+    });
+
+    // 教科別の正答率
+    if (data.stats && data.stats.length) {
+      const st = el('section', 'card stats');
+      st.appendChild(el('h2', null, 'これまでの教科別正答率'));
+      data.stats.forEach(s => {
+        const row = el('div', 'row');
+        row.appendChild(el('span', null, s.subject));
+        const bg = el('div', 'bar-bg');
+        const fg = el('div', 'bar-fg');
+        fg.style.width = (s.rate || 0) + '%';
+        fg.style.background = COLORS[s.subject] || '#888';
+        bg.appendChild(fg);
+        row.appendChild(bg);
+        row.appendChild(el('span', 'pct', s.rate === null ? '—' : s.rate + '%（' + s.n + '問）'));
+        st.appendChild(row);
+      });
+      app.appendChild(st);
+    }
+
+    app.appendChild(el('p', 'note', data.today ? '家族の結果は開き直すと更新されます。明日も朝7時に届きます！' : '過去の問題の結果です'));
+  }
+
+  function showError(msg) {
+    $('#bar').classList.add('hidden');
+    const app = $('#app');
+    app.innerHTML = '';
+    const box = el('div', 'err', msg);
+    const btn = el('button', null, 'もう一度読み込む');
+    btn.onclick = () => location.reload();
+    box.appendChild(el('br'));
+    box.appendChild(btn);
+    app.appendChild(box);
+  }
+
+  function alertInline(msg) {
+    const box = el('div', 'err', msg);
+    $('#app').prepend(box);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setTimeout(() => box.remove(), 5000);
+  }
+
+  main();
+</script>
+</body>
+</html>
