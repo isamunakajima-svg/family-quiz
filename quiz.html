@@ -218,7 +218,7 @@
   function metaRow(q, i, extra) {
     const m = el('div', 'meta');
     m.appendChild(el('span', 'no', '第' + (i + 1) + '問'));
-    const b = el('span', 'badge', q.subject);
+    const b = el('span', 'badge', (q.subject === '数学' && /^小/.test(q.grade || '')) ? '算数' : q.subject);
     b.style.background = COLORS[q.subject] || '#888';
     m.appendChild(b);
     if (q.grade) m.appendChild(el('span', 'grade', q.grade));
