@@ -101,6 +101,10 @@
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .chips button { border: 2px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 14px; font-weight: 700; color: var(--sub); }
   .chips button.on { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
+  .fig { margin: 0 0 14px; background: #F4F9FC; border: 1px solid var(--line); border-radius: 12px; padding: 8px; text-align: center; }
+  .fig svg { width: 100%; height: auto; display: block; }
+  .fig .cap { font-size: 12px; font-weight: 700; color: var(--ink); margin: 2px 0 4px; }
+  .fig .credit { font-size: 9px; color: var(--sub); text-align: right; margin-top: 2px; }
   .confetti { position: fixed; top: -12px; width: 9px; height: 14px; border-radius: 2px; z-index: 50; pointer-events: none; animation: fall linear forwards; }
   @keyframes fall { to { transform: translateY(105vh) rotate(720deg); opacity: .9; } }
   .pill { display: inline-block; background: var(--accent-bg); color: var(--accent); font-weight: 700; padding: 4px 14px; border-radius: 999px; font-size: 14px; margin-top: 8px; }
@@ -290,6 +294,7 @@
       card.id = 'q' + i;
       card.appendChild(metaRow(q, i));
       card.appendChild(el('p', 'qtext', q.question));
+      if (q.figure) card.appendChild(renderFigure(q.figure));
       const box = el('div', 'choices');
       q.choices.forEach((c, j) => {
         const btn = el('button', 'choice');
@@ -414,6 +419,7 @@
       const card = el('section', 'card');
       card.appendChild(metaRow(r, i, el('span', 'mark ' + (r.correct ? 'ok' : 'ng'), r.correct ? '○' : '×')));
       card.appendChild(el('p', 'qtext', r.question));
+      if (r.figure) card.appendChild(renderFigure(r.figure));
       const box = el('div', 'choices');
       r.choices.forEach((c, j) => {
         const b = el('button', 'choice');
@@ -704,6 +710,7 @@
       card.id = 'r' + i;
       card.appendChild(metaRow(r, i));
       card.appendChild(el('p', 'qtext', r.question));
+      if (r.figure) card.appendChild(renderFigure(r.figure));
       const box = el('div', 'choices');
       const btns = r.choices.map((c, j) => {
         const b = el('button', 'choice');
@@ -822,6 +829,121 @@
         btn.textContent = 'この問題を送る';
       }
     });
+  }
+
+  /* ---------- 地図・グラフ ---------- */
+  let MAPS = null;
+  function loadMaps() {
+    if (!MAPS) MAPS = fetch('maps.json').then(r => r.json());
+    return MAPS;
+  }
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  function sv(tag, attrs, text) {
+    const e = document.createElementNS(SVGNS, tag);
+    Object.keys(attrs || {}).forEach(k => e.setAttribute(k, attrs[k]));
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+
+  function renderFigure(f) {
+    const box = el('div', 'fig');
+    if (f.title) box.appendChild(el('div', 'cap', f.title));
+    if (f.type === 'japan' || f.type === 'world') {
+      box.appendChild(el('div', 'note', '地図を読み込み中…'));
+      loadMaps().then(m => {
+        box.querySelector('.note') && box.querySelector('.note').remove();
+        const d = f.type === 'japan' ? m.japan : m.world;
+        const shapes = f.type === 'japan' ? d.prefs : d.countries;
+        const svg = sv('svg', { viewBox: d.viewBox });
+        const hl = f.highlight || [];
+        Object.keys(shapes).forEach(k => {
+          const on = hl.indexOf(k) >= 0;
+          svg.appendChild(sv('path', { d: shapes[k], fill: on ? '#E8772E' : '#D9D4CC', stroke: '#fff', 'stroke-width': f.type === 'japan' ? 0.6 : 0.4 }));
+        });
+        // 強調した場所が小さくても見えるように、上から重ねて縁取り
+        Object.keys(shapes).forEach(k => {
+          if (hl.indexOf(k) >= 0) svg.appendChild(sv('path', { d: shapes[k], fill: '#E8772E', stroke: '#B84F12', 'stroke-width': 1.2 }));
+        });
+        if (f.type === 'japan' && d.inset) {
+          const r = d.inset;
+          svg.appendChild(sv('rect', { x: r[0], y: r[1], width: r[2], height: r[3], fill: 'none', stroke: '#9A9187', 'stroke-dasharray': '4 3', 'stroke-width': 1 }));
+        }
+        box.insertBefore(svg, box.querySelector('.credit'));
+      }).catch(() => { box.appendChild(el('div', 'note', '地図を読み込めませんでした')); });
+      box.appendChild(el('div', 'credit', f.type === 'japan' ? '出典：地球地図日本（国土地理院）を加工' : '出典：Natural Earth'));
+      return box;
+    }
+    if (f.type === 'bar' || f.type === 'line') box.appendChild(drawXY(f));
+    if (f.type === 'climate') box.appendChild(drawClimate(f));
+    return box;
+  }
+
+  function niceMax(v) {
+    if (v <= 0) return 1;
+    const p = Math.pow(10, Math.floor(Math.log10(v)));
+    const n = v / p;
+    return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p;
+  }
+
+  function drawXY(f) {
+    const W = 320, H = 200, L = 44, R = 10, T = 14, B = f.xlabel ? 42 : 30;
+    const svg = sv('svg', { viewBox: '0 0 ' + W + ' ' + H });
+    const vals = f.values, n = vals.length;
+    const max = niceMax(Math.max.apply(null, vals.concat([0])));
+    const min = Math.min(0, Math.min.apply(null, vals));
+    const y = v => T + (H - T - B) * (1 - (v - min) / (max - min));
+    const step = (W - L - R) / n;
+    for (let i = 0; i <= 4; i++) {
+      const v = min + (max - min) * i / 4, yy = y(v);
+      svg.appendChild(sv('line', { x1: L, x2: W - R, y1: yy, y2: yy, stroke: '#E6E0D8', 'stroke-width': 1 }));
+      svg.appendChild(sv('text', { x: L - 4, y: yy + 3, 'text-anchor': 'end', 'font-size': 9, fill: '#8A8178' }, String(+v.toFixed(2))));
+    }
+    if (f.unit) svg.appendChild(sv('text', { x: 4, y: 10, 'font-size': 9, fill: '#8A8178' }, '（' + f.unit + '）'));
+    const pts = [];
+    vals.forEach((v, i) => {
+      const cx = L + step * i + step / 2;
+      if (f.type === 'bar') {
+        const bw = Math.min(28, step * 0.6);
+        svg.appendChild(sv('rect', { x: cx - bw / 2, y: y(Math.max(v, 0)), width: bw, height: Math.abs(y(v) - y(0)), rx: 3, fill: '#E8772E' }));
+      } else pts.push(cx + ',' + y(v));
+      svg.appendChild(sv('text', { x: cx, y: H - B + 13, 'text-anchor': 'middle', 'font-size': 9, fill: '#2B2B2B' }, String(f.labels[i])));
+    });
+    if (f.type === 'line') {
+      svg.appendChild(sv('polyline', { points: pts.join(' '), fill: 'none', stroke: '#E8772E', 'stroke-width': 2 }));
+      pts.forEach(p => { const [cx, cy] = p.split(','); svg.appendChild(sv('circle', { cx, cy, r: 3, fill: '#E8772E' })); });
+    }
+    svg.appendChild(sv('line', { x1: L, x2: W - R, y1: y(0), y2: y(0), stroke: '#9A9187', 'stroke-width': 1 }));
+    if (f.xlabel) svg.appendChild(sv('text', { x: (L + W - R) / 2, y: H - 6, 'text-anchor': 'middle', 'font-size': 9, fill: '#8A8178' }, f.xlabel));
+    return svg;
+  }
+
+  function drawClimate(f) {
+    const W = 320, H = 210, L = 34, R = 38, T = 16, B = 26;
+    const svg = sv('svg', { viewBox: '0 0 ' + W + ' ' + H });
+    const tMin = Math.min(-10, Math.floor(Math.min.apply(null, f.temp) / 10) * 10), tMax = 40;
+    const rMax = Math.max(500, niceMax(Math.max.apply(null, f.rain)));
+    const yT = v => T + (H - T - B) * (1 - (v - tMin) / (tMax - tMin));
+    const yR = v => T + (H - T - B) * (1 - v / rMax);
+    const step = (W - L - R) / 12;
+    for (let i = 0; i <= 5; i++) {
+      const tv = tMin + (tMax - tMin) * i / 5, yy = yT(tv);
+      svg.appendChild(sv('line', { x1: L, x2: W - R, y1: yy, y2: yy, stroke: '#E6E0D8', 'stroke-width': 1 }));
+      svg.appendChild(sv('text', { x: L - 4, y: yy + 3, 'text-anchor': 'end', 'font-size': 9, fill: '#D9534F' }, String(Math.round(tv))));
+      svg.appendChild(sv('text', { x: W - R + 4, y: yR(rMax * i / 5) + 3, 'font-size': 9, fill: '#3B7DD8' }, String(Math.round(rMax * i / 5))));
+    }
+    svg.appendChild(sv('text', { x: 2, y: 10, 'font-size': 9, fill: '#D9534F' }, '気温(℃)'));
+    svg.appendChild(sv('text', { x: W - 2, y: 10, 'text-anchor': 'end', 'font-size': 9, fill: '#3B7DD8' }, '降水量(mm)'));
+    const pts = [];
+    for (let m = 0; m < 12; m++) {
+      const cx = L + step * m + step / 2;
+      svg.appendChild(sv('rect', { x: cx - step * 0.32, y: yR(f.rain[m]), width: step * 0.64, height: yR(0) - yR(f.rain[m]), fill: '#8DB6EA' }));
+      pts.push(cx + ',' + yT(f.temp[m]));
+      svg.appendChild(sv('text', { x: cx, y: H - B + 12, 'text-anchor': 'middle', 'font-size': 9, fill: '#2B2B2B' }, String(m + 1)));
+    }
+    svg.appendChild(sv('polyline', { points: pts.join(' '), fill: 'none', stroke: '#D9534F', 'stroke-width': 2 }));
+    pts.forEach(p => { const [cx, cy] = p.split(','); svg.appendChild(sv('circle', { cx, cy, r: 2.5, fill: '#D9534F' })); });
+    svg.appendChild(sv('text', { x: (L + W - R) / 2, y: H - 4, 'text-anchor': 'middle', 'font-size': 9, fill: '#8A8178' }, '（月）'));
+    return svg;
   }
 
   function hexA(hex, a) {
