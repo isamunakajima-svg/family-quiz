@@ -105,6 +105,38 @@
   .fig svg { width: 100%; height: auto; display: block; }
   .fig .cap { font-size: 12px; font-weight: 700; color: var(--ink); margin: 2px 0 4px; }
   .fig .credit { font-size: 9px; color: var(--sub); text-align: right; margin-top: 2px; }
+  /* 週末実力テスト（模試ふう） */
+  .exam-cover { border: 3px double #3B5B8C; border-radius: 6px; background: #fff; padding: 20px 16px 18px; text-align: center; margin: 14px 0; position: relative; }
+  .exam-cover .kicker { font-size: 12px; letter-spacing: .3em; color: #3B5B8C; font-weight: 700; }
+  .exam-cover h2 { font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; font-size: 30px; margin: 6px 0 2px; letter-spacing: .12em; color: #1F2D45; }
+  .exam-cover .sub { font-size: 13px; color: var(--sub); }
+  .exam-cover .who { display: flex; justify-content: space-between; border-top: 1px solid #C9D3E3; border-bottom: 1px solid #C9D3E3; margin: 14px 0 12px; padding: 8px 4px; font-size: 14px; }
+  .exam-cover .who b { font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; font-size: 17px; }
+  .exam-cover .rule { font-size: 12px; color: var(--sub); text-align: left; line-height: 1.6; margin-top: 10px; white-space: pre-line; }
+  .subj-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .subj { position: relative; border: 2px solid #C9D3E3; border-radius: 10px; background: #F7F9FC; padding: 12px 8px; font: inherit; text-align: center; color: var(--ink); }
+  .subj b { display: block; font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; font-size: 22px; color: #1F2D45; }
+  .subj span { font-size: 11px; color: var(--sub); }
+  .subj.done { background: #fff; border-color: #E6E0D8; }
+  .subj.done .pts { font-size: 15px; font-weight: 800; color: var(--ink); }
+  .subj.wide { grid-column: 1 / -1; padding: 8px; }
+  .subj.wide b { font-size: 16px; display: inline; margin-right: 8px; }
+  .stamp { position: absolute; top: 4px; right: 6px; width: 34px; height: 34px; border: 2.5px solid #D9534F; border-radius: 50%; color: #D9534F; font-weight: 900; font-size: 15px; line-height: 29px; transform: rotate(-14deg); font-family: "Hiragino Mincho ProN", serif; background: rgba(255,255,255,.7); }
+  .sec-cover { text-align: center; padding: 34px 16px; }
+  .sec-cover .big { font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; font-size: 44px; color: #1F2D45; letter-spacing: .2em; }
+  .sec-cover .info { font-size: 16px; margin: 8px 0 18px; }
+  .btn-exam { display: block; width: 100%; border: 0; border-radius: 12px; padding: 15px; font: inherit; font-weight: 800; font-size: 18px; background: #3B5B8C; color: #fff; letter-spacing: .3em; }
+  .tag.over { background: #D9534F; color: #fff; }
+  .tag.prev { background: var(--soft); color: var(--sub); }
+  .report { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .report th { font-size: 11px; color: var(--sub); font-weight: 700; padding: 6px 2px; border-bottom: 2px solid #C9D3E3; }
+  .report td { padding: 9px 2px; border-bottom: 1px solid var(--line); text-align: center; }
+  .report td:first-child { text-align: left; font-family: "Hiragino Mincho ProN", serif; font-weight: 700; }
+  .report tr.total td { font-weight: 800; border-top: 2px solid #C9D3E3; border-bottom: 0; }
+  .up { color: var(--ok); font-weight: 800; } .down { color: var(--ng); font-weight: 800; }
+  .kpi { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; text-align: center; margin: 4px 0 14px; }
+  .kpi div { background: var(--soft); border-radius: 12px; padding: 8px 2px; }
+  .kpi b { display: block; font-size: 22px; } .kpi span { font-size: 11px; color: var(--sub); }
   .confetti { position: fixed; top: -12px; width: 9px; height: 14px; border-radius: 2px; z-index: 50; pointer-events: none; animation: fall linear forwards; }
   @keyframes fall { to { transform: translateY(105vh) rotate(720deg); opacity: .9; } }
   .pill { display: inline-block; background: var(--accent-bg); color: var(--accent); font-weight: 700; padding: 4px 14px; border-radius: 999px; font-size: 14px; margin-top: 8px; }
@@ -247,6 +279,7 @@
       if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
       const params = new URLSearchParams(location.search);
       if (params.get('view') === 'home') return showHome();
+      if (params.get('view') === 'weekly') return showWeekly();
       await openQuiz(params.get('date') || '');
     } catch (e) {
       showError(e.message || String(e));
@@ -257,6 +290,7 @@
     loading();
     try {
       const data = await api('quiz', { date: date || '' });
+      if (data.weeklyDay) return showWeekly();
       state.quizData = data;
       state.date = data.date;
       $('#dateLabel').textContent = data.dateLabel + (data.today ? '' : '（過去の問題）');
@@ -485,6 +519,24 @@
     if (d.examLeft !== null && d.examLeft >= 0) mc.appendChild(el('p', 'exam', '入試まであと ' + d.examLeft + ' 日'));
     app.appendChild(mc);
 
+    // 週末実力テスト
+    if (d.weekly) {
+      const wc = el('section', 'card');
+      wc.appendChild(el('h2', null, '📝 週末実力テスト'));
+      if (d.weekly.open) {
+        wc.appendChild(el('p', null, '今日は実力テストの日！ 月〜土の問題から5教科の再テストです。締め切りは今日の23:59。'));
+        const wb = el('button', 'btn2', d.weekly.done >= d.weekly.total && d.weekly.total ? '成績表を見る' : 'テストを受ける（' + d.weekly.done + ' / ' + d.weekly.total + '教科）');
+        wb.onclick = showWeekly;
+        wc.appendChild(wb);
+      } else {
+        wc.appendChild(el('p', 'note', '次は ' + d.weekly.nextLabel + ' です。月〜土に出た問題がもう一度出ます。'));
+        const wb = el('button', 'btn2', '前回の成績表を見る');
+        wb.onclick = showWeekly;
+        wc.appendChild(wb);
+      }
+      app.appendChild(wc);
+    }
+
     // チーム目標
     if (d.teamGoal) {
       const tg = d.teamGoal;
@@ -679,7 +731,9 @@
 
     app.appendChild(el('p', 'note', '偏差値は、各問題の「全国の推定正答率」と自分の正答率の差から計算した目安です。\n実際の模試の偏差値とは異なります。'));
 
-    if (d.todayReady) {
+    if (d.weekly && d.weekly.open) {
+      setBar(d.weekly.done >= d.weekly.total && d.weekly.total ? '実力テストの成績表を見る' : '週末実力テストを受ける（' + d.weekly.done + ' / ' + d.weekly.total + '）', showWeekly);
+    } else if (d.todayReady) {
       setBar(d.todayDone ? '今日の解説を見る' : '今日の10問を解く', () => openQuiz(''));
     } else {
       $('#bar').classList.add('hidden');
@@ -752,6 +806,269 @@
       }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+  }
+
+  /* ---------- 週末実力テスト ---------- */
+  const secLabel = (key, track) => (key === '数学' && track === '小6') ? '算数' : key;
+
+  async function showWeekly() {
+    loading();
+    setNav('ホーム', showHome);
+    $('#title').textContent = '週末実力テスト';
+    try {
+      const w = await api('weekly');
+      state.weekly = w;
+      if (!w.open) return renderWeeklyClosed(w);
+      renderWeeklyCover(w);
+    } catch (e) {
+      showError(e.message || String(e), true);
+    }
+  }
+
+  function renderWeeklyClosed(w) {
+    $('#dateLabel').textContent = '週末実力テスト';
+    const app = $('#app');
+    app.innerHTML = '';
+    const c = el('section', 'card');
+    c.appendChild(el('h2', null, '次の週末実力テスト'));
+    c.appendChild(el('p', null, w.nextLabel + '（日曜）の朝4時に届きます。月〜土に出た問題がもう一度出るので、間違えた問題は解説を読んでおこう！'));
+    app.appendChild(c);
+    if (w.lastReport) app.appendChild(reportCard(w.lastReport, '前回の成績表（' + w.lastReport.weekLabel + '）'));
+    setBar('ホームへ', showHome);
+  }
+
+  function renderWeeklyCover(w) {
+    $('#dateLabel').textContent = w.dateLabel;
+    $('#title').textContent = '週末実力テスト';
+    window.scrollTo({ top: 0 });
+    const app = $('#app');
+    app.innerHTML = '';
+    const cv = el('section', 'exam-cover');
+    cv.appendChild(el('div', 'kicker', '家族の毎日10問'));
+    cv.appendChild(el('h2', null, '週末実力テスト'));
+    cv.appendChild(el('div', 'sub', w.dateLabel + '　実施'));
+    const who = el('div', 'who');
+    const n = el('span', null, '受験者　');
+    n.appendChild(el('b', null, w.name || ''));
+    who.appendChild(n);
+    who.appendChild(el('span', null, '締め切り ' + w.deadline));
+    cv.appendChild(who);
+    const grid = el('div', 'subj-grid');
+    w.sections.forEach(sec => {
+      const b = el('button', 'subj' + (sec.done ? ' done' : '') + (sec.optional ? ' wide' : ''));
+      b.type = 'button';
+      b.appendChild(el('b', null, sec.optional ? '🎁 ' + sec.key : secLabel(sec.key, w.track)));
+      if (sec.done) {
+        b.appendChild(el('span', 'pts', sec.score + ' / ' + sec.total));
+        b.appendChild(el('div', 'stamp', '済'));
+      } else {
+        b.appendChild(el('span', null, sec.count + '問・目安' + sec.minutes + '分' + (sec.optional ? '（おまけ）' : '')));
+      }
+      b.onclick = () => openSection(sec.key);
+      grid.appendChild(b);
+    });
+    cv.appendChild(grid);
+    cv.appendChild(el('p', 'rule', '・月〜土に出た問題の再テストです。好きな教科から、好きな時間に解けます。\n・選択肢の順番は入れかわっています。\n・前に間違えた問題を正解すると「克服！」。\n・結果は「定着率」として記録され、偏差値には入りません。'));
+    app.appendChild(cv);
+    if (w.allDone) setBar('成績表を見る', () => renderReport(w.report));
+    else {
+      const left = w.sections.filter(x => !x.done && !x.optional).length;
+      setBar('あと' + left + '教科', () => {}, true);
+    }
+  }
+
+  async function openSection(key) {
+    loading();
+    try {
+      const d = await api('weeklySection', { section: key });
+      if (d.answered) return renderSectionResult(d);
+      renderSectionCover(d);
+    } catch (e) {
+      showError(e.message || String(e), true);
+    }
+  }
+
+  function renderSectionCover(d) {
+    const label = secLabel(d.section, state.weekly && state.weekly.track);
+    $('#title').textContent = label;
+    setNav('表紙', showWeekly);
+    const app = $('#app');
+    app.innerHTML = '';
+    const c = el('section', 'card sec-cover exam-cover');
+    c.appendChild(el('div', 'kicker', '週末実力テスト'));
+    c.appendChild(el('div', 'big', label));
+    c.appendChild(el('div', 'info', d.questions.length + '問　目安' + d.minutes + '分'));
+    const go = el('button', 'btn-exam', 'はじめ');
+    go.onclick = () => renderSectionQuiz(d);
+    c.appendChild(go);
+    c.appendChild(el('p', 'note', '一度提出すると、やり直しはできません。'));
+    app.appendChild(c);
+    $('#bar').classList.add('hidden');
+  }
+
+  function renderSectionQuiz(d) {
+    const label = secLabel(d.section, state.weekly && state.weekly.track);
+    $('#title').textContent = label + '（' + d.questions.length + '問）';
+    // 選択肢を毎回シャッフル（order[表示位置] = 元の番号）
+    const qs = d.questions.map(q => {
+      const order = q.choices.map((_, i) => i).sort(() => Math.random() - 0.5);
+      return Object.assign({}, q, { order: order, shown: order.map(i => q.choices[i]) });
+    });
+    const picks = {};
+    const app = $('#app');
+    app.innerHTML = '';
+    window.scrollTo({ top: 0 });
+    qs.forEach((q, i) => {
+      const card = el('section', 'card');
+      card.id = 'w' + i;
+      card.appendChild(metaRow(q, i));
+      card.appendChild(el('p', 'qtext', q.question));
+      if (q.figure) card.appendChild(renderFigure(q.figure));
+      const box = el('div', 'choices');
+      q.shown.forEach((c, j) => {
+        const btn = el('button', 'choice');
+        btn.type = 'button';
+        btn.appendChild(el('span', 'lb', LABELS[j]));
+        btn.appendChild(el('span', 'tx', c));
+        btn.onclick = () => {
+          const first = picks[q.qid] === undefined;
+          picks[q.qid] = q.order[j];
+          [...box.children].forEach((b, k) => b.classList.toggle('picked', k === j));
+          update();
+          if (first) {
+            const next = qs.findIndex(x => picks[x.qid] === undefined);
+            if (next >= 0) setTimeout(() => document.getElementById('w' + next).scrollIntoView({ behavior: 'smooth', block: 'start' }), 250);
+          }
+        };
+        box.appendChild(btn);
+      });
+      card.appendChild(box);
+      app.appendChild(card);
+    });
+    const update = () => {
+      const n = Object.keys(picks).length;
+      setBar(n < qs.length ? '提出する（' + n + ' / ' + qs.length + '）' : '提出する', submitSection, n < qs.length);
+    };
+    const submitSection = async () => {
+      const btn = $('#barBtn');
+      btn.disabled = true;
+      btn.textContent = '採点中…';
+      try {
+        const r = await api('weeklySubmit', { section: d.section, answers: picks });
+        renderSectionResult(r, true);
+      } catch (e) {
+        alertInline(e.message || String(e));
+        update();
+      }
+    };
+    update();
+  }
+
+  function renderSectionResult(r, fresh) {
+    const label = secLabel(r.section, state.weekly && state.weekly.track);
+    $('#title').textContent = label + 'の結果';
+    setNav('表紙', showWeekly);
+    window.scrollTo({ top: 0 });
+    const app = $('#app');
+    app.innerHTML = '';
+    const sc = el('section', 'card score');
+    const tier = scoreTier(r.score, r.total);
+    sc.appendChild(el('div', 'rank-label' + (fresh ? ' pop' : ''), tier.label)).style.background = tier.color;
+    sc.appendChild(el('div', 'face' + (fresh ? ' pop' : ''), tier.face));
+    const big = el('div', 'big', String(r.score));
+    big.appendChild(el('small', null, ' / ' + r.total));
+    sc.appendChild(big);
+    if (r.overcame) sc.appendChild(el('div', 'pill', '💪 克服 ' + r.overcame + '問！（月〜土に間違えた問題を正解）'));
+    else sc.appendChild(el('div', 'msg', tier.msg));
+    if (fresh && tier.confetti) setTimeout(confetti, 300);
+    app.appendChild(sc);
+    r.results.forEach((q, i) => {
+      const card = el('section', 'card');
+      const mark = el('span', 'mark ' + (q.correct ? 'ok' : 'ng'), q.correct ? '○' : '×');
+      card.appendChild(metaRow(q, i, mark));
+      const tags = el('div');
+      if (q.overcame) tags.appendChild(el('span', 'tag over', '克服！'));
+      if (q.prev === 'ok') tags.appendChild(el('span', 'tag prev', '月〜土は○'));
+      if (q.prev === 'ng') tags.appendChild(el('span', 'tag prev', '月〜土は×'));
+      if (tags.children.length) { tags.style.marginBottom = '6px'; card.appendChild(tags); }
+      card.appendChild(el('p', 'qtext', q.question));
+      if (q.figure) card.appendChild(renderFigure(q.figure));
+      const box = el('div', 'choices');
+      q.choices.forEach((c, j) => {
+        const b = el('button', 'choice');
+        b.type = 'button';
+        b.disabled = true;
+        if (j === q.answerIndex) b.classList.add('is-correct');
+        else if (j === q.chosenIndex) b.classList.add('is-wrong');
+        b.appendChild(el('span', 'lb', LABELS[j]));
+        const tx = el('span', 'tx', c);
+        if (j === q.chosenIndex) tx.appendChild(el('span', 'tag you', 'あなた'));
+        if (j === q.answerIndex) tx.appendChild(el('span', 'tag ans', '正解'));
+        b.appendChild(tx);
+        box.appendChild(b);
+      });
+      card.appendChild(box);
+      const ex = el('div', 'expl');
+      ex.appendChild(el('h3', null, '解説'));
+      ex.appendChild(el('p', null, q.explanation));
+      card.appendChild(ex);
+      app.appendChild(card);
+    });
+    if (r.allDone && r.report) setBar('5教科そろった！成績表を見る', () => renderReport(r.report));
+    else setBar('表紙にもどる', showWeekly);
+  }
+
+  function reportCard(rep, title) {
+    const c = el('section', 'card');
+    c.appendChild(el('h2', null, title));
+    const k = el('div', 'kpi');
+    [[rep.rate + '%', '定着率'], [rep.score + ' / ' + rep.total, '正解'], [rep.overcame + '問', '克服']].forEach(x => {
+      const d = el('div');
+      d.appendChild(el('b', null, x[0]));
+      d.appendChild(el('span', null, x[1]));
+      k.appendChild(d);
+    });
+    c.appendChild(k);
+    const t = el('table', 'report');
+    const h = el('tr');
+    ['教科', '今回', '定着率', '月〜土', '克服'].forEach(x => h.appendChild(el('th', null, x)));
+    t.appendChild(h);
+    rep.sections.forEach(s => {
+      const tr = el('tr');
+      tr.appendChild(el('td', null, s.optional ? '家族' : secLabel(s.key, state.weekly && state.weekly.track)));
+      tr.appendChild(el('td', null, s.done ? s.score + '/' + s.total : '—'));
+      tr.appendChild(el('td', null, s.rate === null ? '—' : s.rate + '%'));
+      const dd = el('td');
+      if (s.dailyRate === null) dd.textContent = '—';
+      else {
+        dd.textContent = s.dailyRate + '%';
+        if (s.rate !== null && s.rate !== s.dailyRate) dd.appendChild(el('span', s.rate > s.dailyRate ? 'up' : 'down', s.rate > s.dailyRate ? ' ↑' : ' ↓'));
+      }
+      tr.appendChild(dd);
+      tr.appendChild(el('td', null, s.overcame ? s.overcame + '問' : '—'));
+      t.appendChild(tr);
+    });
+    const tot = el('tr', 'total');
+    [['合計'], [rep.score + '/' + rep.total], [rep.rate + '%'], [rep.dailyRate === null ? '—' : rep.dailyRate + '%'], [rep.overcame + '問']].forEach(x => tot.appendChild(el('td', null, x[0])));
+    t.appendChild(tot);
+    c.appendChild(t);
+    const msg = rep.overcame >= 5 ? '月〜土に間違えた問題を ' + rep.overcame + '問 も克服！復習の成果が出ています👏'
+      : rep.dailyRate !== null && rep.rate > rep.dailyRate ? '月〜土より正答率アップ！ちゃんと身についています'
+      : rep.dailyRate !== null && rep.rate < rep.dailyRate ? '月〜土より下がった教科は、ホームの「復習」で解き直そう'
+      : 'おつかれさま！来週も実力テストで確かめよう';
+    c.appendChild(el('p', 'note', '「↑」は月〜土より上がった教科です。\n' + msg));
+    return c;
+  }
+
+  function renderReport(rep) {
+    $('#title').textContent = '成績表';
+    setNav('表紙', showWeekly);
+    window.scrollTo({ top: 0 });
+    const app = $('#app');
+    app.innerHTML = '';
+    app.appendChild(reportCard(rep, '📊 週末実力テスト 成績表（' + rep.weekLabel + '）'));
+    app.appendChild(el('p', 'note', '定着率は偏差値とは別の記録です。家族の結果は月曜朝の投稿で発表されます。'));
+    setBar('ホームへ', showHome);
   }
 
   /* ---------- 家族の出題フォーム（アプリ内） ---------- */
